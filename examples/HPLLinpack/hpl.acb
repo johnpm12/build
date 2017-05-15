@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -e
+
+echo $PATH
+if [ "$EUID" -ne 0 ]; then
+    echo "This script uses functionality which requires root privileges"
+    exit 1
+fi
+
+# Start the build with an empty ACI
+acbuild --debug begin
+
+# In the event of the script exiting, end the build
+acbuildEnd() {
+    export EXIT=$?
+    acbuild --debug end && exit $EXIT
+}
+trap acbuildEnd EXIT
+
+# Name the ACI
+acbuild --debug set-name hpl
+
+# Based on ubuntu
+acbuild --debug dep add quay.io/sameersbn/ubuntu    
+
+#Copies the required directory
+acbuild copy-to-dir hpl-2.1 /
+
+
+#A shell script that goes into the folder and runs the Linpack (HPL) benchmark
+acbuild copy rktcmd.sh /rktcmd.sh
+
+# Install mpi and other libraries required to build hpl
+acbuild --debug run apt-get update
+acbuild --debug run apt-get install libopenmpi-dev openmpi-bin openmpi-doc libatlas-base-dev gcc openssh-server openssh-client make net-tools g++ vim bzip2 unzip
+
+# Add a port for http traffic over port 80
+acbuild --debug port add http tcp 80
+
+# Run the BASH shell
+acbuild set-exec /bin/bash
+
+# Save the ACI
+acbuild --debug write --overwrite hpl.aci
+
+# Exit the build
+acbuild end
+
+#Validate the build
+actool validate trial.aci
+echo $?
